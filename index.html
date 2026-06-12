@@ -343,6 +343,10 @@ a:hover{text-decoration:underline}
   .mainnav a.racebtn{background:transparent; color:#cfcfc7; border-left:3px solid var(--rc)}
   .mainnav a.racebtn.on{background:var(--bar); color:#fff}
   .menus{margin-left:0; width:auto}
+  /* keep dropdowns within viewport on mobile: full-width panel below topbar */
+  .dropdown{position:fixed; top:53px; left:0; right:0; width:100%; min-width:0; max-width:100vw}
+  .dropdown.scroll{min-width:0}
+  .pitems{max-height:45vh}
 }
 @media(max-width:520px){ .teams{grid-template-columns:1fr} .podium{grid-template-columns:1fr} }
 </style>
@@ -1461,6 +1465,7 @@ function viewAllStats(sortBy) {
   }
   const lastPlaceAll = [...lastPlaceTallyAll.entries()]
     .map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  const lastPlaceAllRanks = assignRanks(lastPlaceAll, (r) => r.n);
 
   // Meeste rode lantaarns (klassement) — all editions
   const rodeLatTallyAll = new Map();
@@ -1477,6 +1482,7 @@ function viewAllStats(sortBy) {
   }
   const rodeLatAll = [...rodeLatTallyAll.entries()]
     .map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  const rodeLatAllRanks = assignRanks(rodeLatAll, (r) => r.n);
 
   return `
     ${statsSubbar("deelnemers")}
@@ -1486,8 +1492,8 @@ function viewAllStats(sortBy) {
       <div class="card"><div class="cardhead sm">Meeste poulezeges</div>${bigStat(st.mostWins, "Zeges")}</div>
       <div class="card"><div class="cardhead sm">Meeste etappezeges</div>${bigStat(st.mostStageWins, "Etappes")}</div>
       <div class="card"><div class="cardhead sm">Meeste dagen aan de leiding</div>${bigStat(st.mostLead, "Dagen")}</div>
-      <div class="card"><div class="cardhead sm">Meeste laatste plaatsen (etappe)</div>${clipWrap(table(["#", "Deelnemer", { label: "Keren", cls: "num" }], lastPlaceAll.slice(0, 15).map((r, i) => [{ html: i + 1, cls: "num rank" }, { html: nameLink(r.name), cls: "name" }, { html: r.n, cls: "num strong" }])), lastPlaceAll.length)}</div>
-      <div class="card"><div class="cardhead sm">Meeste rode lantaarns (klassement)</div>${clipWrap(table(["#", "Deelnemer", { label: "Keren", cls: "num" }], rodeLatAll.slice(0, 15).map((r, i) => [{ html: i + 1, cls: "num rank" }, { html: nameLink(r.name), cls: "name" }, { html: r.n, cls: "num strong" }])), rodeLatAll.length)}</div>
+      <div class="card"><div class="cardhead sm">Meeste laatste plaatsen (etappe)</div>${clipWrap(table(["#", "Deelnemer", { label: "Keren", cls: "num" }], lastPlaceAll.slice(0, 15).map((r, i) => [{ html: lastPlaceAllRanks[i], cls: "num rank" }, { html: nameLink(r.name), cls: "name" }, { html: r.n, cls: "num strong" }])), lastPlaceAll.length)}</div>
+      <div class="card"><div class="cardhead sm">Meeste rode lantaarns (klassement)</div>${clipWrap(table(["#", "Deelnemer", { label: "Keren", cls: "num" }], rodeLatAll.slice(0, 15).map((r, i) => [{ html: rodeLatAllRanks[i], cls: "num rank" }, { html: nameLink(r.name), cls: "name" }, { html: r.n, cls: "num strong" }])), rodeLatAll.length)}</div>
       ${recordsCard(eds)}
       ${consistencyCard(eds, 3, sortBy)}
     </div>
@@ -2055,6 +2061,7 @@ function viewRace(race, statsYear, sortPod, sortRear) {
   const lastPlaceArr = [...lastPlaceTally.entries()]
     .map(([name, n]) => ({ name, n }))
     .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  const lastPlaceRanks = assignRanks(lastPlaceArr, (r) => r.n);
 
   // ── Meeste rode lantaarns (klassement) ────────────────────────────────────
   // Last in running GC after each completed stage
@@ -2075,6 +2082,7 @@ function viewRace(race, statsYear, sortPod, sortRear) {
   const rodeLatArr = [...rodeLatTally.entries()]
     .map(([name, n]) => ({ name, n }))
     .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  const rodeLatRanks = assignRanks(rodeLatArr, (r) => r.n);
 
   // ── Tops & Flops — only shown when a specific year is selected ───────────
   const topsFlopsHtml = statsYear ? topsAndFlops(filterEds) : "";
@@ -2096,8 +2104,8 @@ function viewRace(race, statsYear, sortPod, sortRear) {
       <div class="card"><div class="cardhead sm">Meeste eindzeges</div>${stat(st.mostWins, "Zeges", 99)}</div>
       <div class="card"><div class="cardhead sm">Meeste etappezeges</div>${stat(st.mostStageWins, "Etappes")}</div>
       <div class="card"><div class="cardhead sm">Meeste dagen aan de leiding</div>${stat(st.mostLead, "Dagen")}</div>
-      <div class="card"><div class="cardhead sm">Meeste laatste plaatsen (etappe)</div>${clipWrap(table(["#", "Deelnemer", { label: "Keren", cls: "num" }], lastPlaceArr.slice(0, 15).map((r, i) => [{ html: i + 1, cls: "num rank" }, { html: nameLink(r.name), cls: "name" }, { html: r.n, cls: "num strong" }])), lastPlaceArr.length)}</div>
-      <div class="card"><div class="cardhead sm">Meeste rode lantaarns (klassement)</div>${clipWrap(table(["#", "Deelnemer", { label: "Keren", cls: "num" }], rodeLatArr.slice(0, 15).map((r, i) => [{ html: i + 1, cls: "num rank" }, { html: nameLink(r.name), cls: "name" }, { html: r.n, cls: "num strong" }])), rodeLatArr.length)}</div>
+      <div class="card"><div class="cardhead sm">Meeste laatste plaatsen (etappe)</div>${clipWrap(table(["#", "Deelnemer", { label: "Keren", cls: "num" }], lastPlaceArr.slice(0, 15).map((r, i) => [{ html: lastPlaceRanks[i], cls: "num rank" }, { html: nameLink(r.name), cls: "name" }, { html: r.n, cls: "num strong" }])), lastPlaceArr.length)}</div>
+      <div class="card"><div class="cardhead sm">Meeste rode lantaarns (klassement)</div>${clipWrap(table(["#", "Deelnemer", { label: "Keren", cls: "num" }], rodeLatArr.slice(0, 15).map((r, i) => [{ html: rodeLatRanks[i], cls: "num rank" }, { html: nameLink(r.name), cls: "name" }, { html: r.n, cls: "num strong" }])), rodeLatArr.length)}</div>
       <div class="card"><div class="cardhead sm">Etappe podiums (1e/2e/3e per etappe) <span class="sub">· klik kolom om te sorteren</span></div>${podTbl}</div>
       <div class="card"><div class="cardhead sm">Etappe rode lantaarn (laatste/2e v/o/3e v/o) <span class="sub">· klik kolom om te sorteren</span></div>${rearTbl}</div>
       ${recordsCard(filterEds)}
@@ -3276,7 +3284,7 @@ function participantProTeams(name) {
     const p = e.participants.find((x) => cn(x) === name);
     if (!p) continue;
     for (const r of p.team) {
-      const sq = r.sq || "—";
+      const sq = canonicalSq(r.sq || "—");
       if (!sqMap.has(sq)) sqMap.set(sq, { sq, picks: 0, pts: 0 });
       sqMap.get(sq).picks++;
       sqMap.get(sq).pts += r.t;
@@ -3356,8 +3364,9 @@ function dnfCard(ed) {
   </div>`;
 }
 function allEditionsSorted() {
-  // All editions chronologically (oldest first)
-  return [...editionsDesc()].reverse();
+  // All editions chronologically (oldest first), within same year: Giro → Tour → Vuelta
+  return [...POOL].sort((a, b) =>
+    a.year - b.year || ALL_RACES.indexOf(a.race) - ALL_RACES.indexOf(b.race));
 }
 function firstEditionOf(name) {
   for (const e of allEditionsSorted()) {
