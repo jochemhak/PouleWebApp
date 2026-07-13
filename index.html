@@ -400,6 +400,17 @@ const manifestForRace = (race) => manifestDesc().filter((e) => e.race === race);
 const racesWithData = () => new Set((INDEX.editions || []).map((e) => e.race));
 const allNames = () => (INDEX.participants || []).slice();
 
+/* Most recent edition in canonical race order (Giro → Tour → Vuelta within a
+   year, so more recent = higher race index) that has at least one completed
+   stage. Reads the manifest's `completed` count so it also works in the lazy
+   web build before any edition data has been fetched. */
+function currentEdition() {
+  const RACE_SEQ = ["Giro", "Tour", "Vuelta"];
+  const chron = (INDEX.editions || []).slice().sort((a, b) =>
+    b.year - a.year || RACE_SEQ.indexOf(b.race) - RACE_SEQ.indexOf(a.race));
+  return chron.find((e) => (e.completed || 0) > 0) || chron[0] || null;
+}
+
 const _inflight = new Map();
 function loadEdition(meta) {
   if (getEdition(meta.race, meta.year)) return Promise.resolve();
@@ -423,7 +434,7 @@ function neededEditions(ctx) {
   if (ctx.view === "results" || ctx.view === "startlist" || ctx.view === "cyclists") {
     const e = pickEdition(ctx.race, ctx.year); return e ? [e] : [];
   }
-  if (ctx.view === "home") { const e = manifestDesc()[0]; return e ? [e] : []; }
+  if (ctx.view === "home") { const e = currentEdition(); return e ? [e] : []; }
   if (ctx.view === "superpoule" || ctx.view === "superpoule_stats") return all;
   if (ctx.view === "stage") { const e = pickEdition(ctx.race, ctx.year); return e ? [e] : []; }
   if (ctx.view === "rules") return [];
@@ -1324,41 +1335,46 @@ function recordBreakingTile(ed) {
 }
 
 function viewHome() {
-  const ed = editionsDesc()[0];
+  const meta = currentEdition();
+  const ed = meta ? getEdition(meta.race, meta.year) : null;
   if (!ed) return `<div class="card"><p class="empty">Geen data geladen.</p></div>`;
-  const comp = completedStages(ed);
-  const ranked = byTotalDesc(ed);
-  const rankNums = assignRanks(ranked, (p) => p.t);
-  // podium: all participants with rank <= 3
-  const podium = ranked.filter((_, i) => rankNums[i] <= 3);
-  const rows = ranked.map((p, i) => [
+  const comp = completedStages(ed);          // last completed stage (NMAX = eindklassement)
+  const label = labelStage(comp);            // "Etappe 9" or "Klassementspunten"
+
+  // stage result = points scored on THIS stage (p.e for the eindklassement)
+  const ranked = ed.participants
+    .map((p) => ({ p, v: stageVals(p)[comp - 1] || 0 }))
+    .sort((a, b) => b.v - a.v || cn(a.p).localeCompare(cn(b.p)));
+  const rankNums = assignRanks(ranked, (x) => x.v);
+  const podium = ranked.filter((_, i) => rankNums[i] <= 3 && ranked[i].v > 0);
+
+  const rows = ranked.map((x, i) => [
     { html: rankNums[i], cls: "num rank" },
-    { html: nameLink(cn(p), ed.race, ed.year), cls: "name" },
-    { html: p.t, cls: "num strong" },
+    { html: nameLink(cn(x.p), ed.race, ed.year), cls: "name" },
+    { html: x.v, cls: "num strong" },
   ]);
   const hh = [{ label: "#", cls: "num" }, "Deelnemer", { label: "Punten", cls: "num" }];
   const half = Math.ceil(rows.length / 2);
-  const after = comp >= 22 ? "eindklassement" : "klassement na " + labelStage(comp).toLowerCase();
 
   return `
     <div class="hero">
-      <div class="eyebrow" style="color:${RACE_COLOR[ed.race]}">Meest recente koers</div>
-      <h1>${ed.race} ${ed.year} <span class="sub">· ${after}</span></h1>
-      <div class="podcap">Klassement — doorlopend totaal</div>
+      <div class="eyebrow" style="color:${RACE_COLOR[ed.race]}">Meest recente etappe</div>
+      <h1>${ed.race} ${ed.year} <span class="sub">· ${esc(label.toLowerCase())} — uitslag</span></h1>
+      <div class="podcap">Etappe-uitslag — punten deze etappe</div>
       <div class="podium">
-        ${podium.map((p, i) => `
-          <div class="pod p${Math.min(rankNums[ranked.indexOf(p)], 3)}">
-            <div class="pos">${rankNums[ranked.indexOf(p)]}</div>
-            <div class="who">${nameLink(cn(p), ed.race, ed.year)}</div>
-            <div class="pts">${p.t}<small>ptn</small></div>
+        ${podium.map((x) => `
+          <div class="pod p${Math.min(rankNums[ranked.indexOf(x)], 3)}">
+            <div class="pos">${rankNums[ranked.indexOf(x)]}</div>
+            <div class="who">${nameLink(cn(x.p), ed.race, ed.year)}</div>
+            <div class="pts">${x.v}<small>ptn</small></div>
           </div>`).join("")}
       </div>
     </div>
     <div class="card">
-      <div class="cardhead">${ed.race} ${ed.year} · ${after}
-        <a class="more" href="#/race/${ed.race}/${ed.year}">volledig klassement →</a></div>
+      <div class="cardhead">${ed.race} ${ed.year} · ${esc(label)} — uitslag
+        <a class="more" href="#/race/${ed.race}/${ed.year}/stage/${comp}">volledige etappe-uitslag →</a></div>
       <div class="split">
-        ${table(hh, rows.slice(0, half), { leaderFirst: true })}
+        ${table(hh, rows.slice(0, half), { leaderFirst: podium.length > 0 })}
         ${table(hh, rows.slice(half), { leaderFirst: false })}
       </div>
     </div>
