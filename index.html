@@ -1320,55 +1320,70 @@ function recordBreakingTile(ed) {
   const curDaysLed = runningGcTally(ed).lead;
 
   const broken = [];
+  // curHolder may be a single name or an array of tied names — all are shown together.
   const check = (label, curVal, curHolder, raceRecord, allRecord) => {
-    if (!curHolder) return;
+    const holders = (Array.isArray(curHolder) ? curHolder : [curHolder]).filter(Boolean);
+    if (!holders.length) return;
     const tags = [];
     if (prRace && curVal > raceRecord) tags.push(`${ed.race} record`);
     if (prAll && curVal > allRecord) tags.push("all-time record");
-    if (tags.length) broken.push({ label, holder: curHolder, value: curVal, tags });
+    if (tags.length) broken.push({ label, holders, value: curVal, tags });
   };
+  const holdersAtTop = () => curSorted.filter((p) => p.t === curTop.t).map((p) => cn(p));
 
-  // Best edition score
-  if (curTop) check("Beste editiescore", curTop.t, cn(curTop),
+  // Best edition score — everyone tied for the top total
+  if (curTop) check("Beste editiescore", curTop.t, holdersAtTop(),
     prRace ? prRace.bestEdScore : 0, prAll ? prAll.bestEdScore : 0);
 
-  // Best stage score
-  const bestStagePart = ed.participants.reduce((best, p) => {
-    const v = Math.max(0, ...p.s.slice(0, comp).map((x) => x || 0));
-    return v > (best ? best.v : 0) ? { name: cn(p), v } : best;
-  }, null);
-  if (bestStagePart) check("Beste etappescore", bestStagePart.v, bestStagePart.name,
+  // Best stage score — everyone whose best single-stage score equals the record value
+  const bestStageHolders = curBestStage > 0
+    ? ed.participants
+        .filter((p) => Math.max(0, ...p.s.slice(0, comp).map((x) => x || 0)) === curBestStage)
+        .map((p) => cn(p))
+    : [];
+  if (bestStageHolders.length) check("Beste etappescore", curBestStage, bestStageHolders,
     prRace ? prRace.bestStageScore : 0, prAll ? prAll.bestStageScore : 0);
 
-  // Most stage wins this edition
-  for (const [name, wins] of curSW)
-    check(`Meeste etappezeges (editie)`, wins, name,
+  // Most stage wins this edition — the record value and everyone tied on it
+  if (curSW.size) {
+    const maxWins = Math.max(...curSW.values());
+    const holders = [...curSW.entries()].filter(([, w]) => w === maxWins).map(([n]) => n);
+    check("Meeste etappezeges (editie)", maxWins, holders,
       prRace ? prRace.mostStageWins : 0, prAll ? prAll.mostStageWins : 0);
+  }
 
   // Biggest gap 1st to 2nd
-  if (curGap > 0) check("Grootste voorsprong", curGap, cn(curTop),
+  if (curGap > 0) check("Grootste voorsprong", curGap, holdersAtTop(),
     prRace ? prRace.bigGap : 0, prAll ? prAll.bigGap : 0);
 
-  // Most days in the lead (this edition)
-  for (const [name, days] of curDaysLed)
-    check("Meeste dagen aan de leiding (editie)", days, name,
+  // Most days in the lead (this edition) — the record value and everyone tied on it
+  if (curDaysLed.size) {
+    const maxDays = Math.max(...curDaysLed.values());
+    const holders = [...curDaysLed.entries()].filter(([, d]) => d === maxDays).map(([n]) => n);
+    check("Meeste dagen aan de leiding (editie)", maxDays, holders,
       prRace ? prRace.mostDaysLed : 0, prAll ? prAll.mostDaysLed : 0);
+  }
 
-  // All-time stage wins (any participant's career total including this edition)
+  // All-time stage wins (career total incl. this edition) — group tied record holders
+  const allTimeBreakers = [];
   for (const [name, wins] of allSW) {
     const priorTotal = priorAllEds.reduce((s, e) => {
       const c = completedStages(e);
       for (let k = 0; k < c; k++) if (stageWinners(e, k).includes(name)) s++;
       return s;
     }, 0);
-    if (wins > priorTotal && wins > (prAll ? prAll.mostStageWins : 0))
-      broken.push({ label: "All-time etappezeges", holder: name, value: wins, tags: ["all-time record"] });
+    if (wins > priorTotal && wins > (prAll ? prAll.mostStageWins : 0)) allTimeBreakers.push([name, wins]);
+  }
+  if (allTimeBreakers.length) {
+    const maxW = Math.max(...allTimeBreakers.map(([, w]) => w));
+    const holders = allTimeBreakers.filter(([, w]) => w === maxW).map(([n]) => n);
+    broken.push({ label: "All-time etappezeges", holders, value: maxW, tags: ["all-time record"] });
   }
 
-  // Deduplicate (same holder + label)
+  // Deduplicate (same label + same set of holders)
   const seen = new Set();
   const unique = broken.filter((b) => {
-    const key = b.label + b.holder;
+    const key = b.label + "|" + b.holders.join("/");
     if (seen.has(key)) return false;
     seen.add(key); return true;
   });
@@ -1378,7 +1393,7 @@ function recordBreakingTile(ed) {
   const items = unique.map((b) => `
     <div class="record-item">
       <div class="record-label">${esc(b.label)}</div>
-      <div class="record-val">${nameLink(b.holder)} · <strong>${b.value}</strong></div>
+      <div class="record-val">${b.holders.map((h) => nameLink(h)).join(" / ")} · <strong>${b.value}</strong></div>
       <div class="record-tags">${b.tags.map((t) => `<span class="record-tag">${esc(t)}</span>`).join("")}</div>
     </div>`).join("");
 
